@@ -1,38 +1,53 @@
 from flask import Flask, request, jsonify
 import requests
+import joblib
+import numpy as np
 
 app = Flask(__name__)
+
+# ============================
+# CARGAR MODELO ML
+# ============================
+modelo = joblib.load("modelo_trading.pkl")
+
+def predecir(open_price, sl, tp, close_price, volume):
+    X = np.array([[open_price, sl, tp, close_price, volume]])
+    pred = modelo.predict(X)[0]
+    return "BUY" if pred == 1 else "SELL"
 
 # ============================
 # CONFIGURACIÓN DE TELEGRAM
 # ============================
 BOT_TOKEN = "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno"
-CHAT_ID   = "-1003230221533"   # puede ser grupo o canal
+CHAT_ID   = "-1003230221533"
 
 # ============================
-# RUTA PRINCIPAL /signal
+# RUTA PARA RECIBIR DATOS Y PREDECIR
 # ============================
-@app.route("/signal", methods=["POST"])
-def signal():
+@app.route("/predict", methods=["POST"])
+def predict():
     try:
         data = request.get_json()
-        print("Signal recibido:", data)
+        print("Datos recibidos:", data)
 
-        # Extraer campos
-        signal_type = data.get("signal", "N/A")
+        open_price  = float(data["open_price"])
+        sl          = float(data["sl"])
+        tp          = float(data["tp"])
+        close_price = float(data["close_price"])
+        volume      = float(data["volume"])
         ticker      = data.get("ticker", "N/A")
-        price       = data.get("price", "N/A")
-        sl          = data.get("sl", "N/A")
-        tp          = data.get("tp", "N/A")
         timeframe   = data.get("timeframe", "N/A")
         time        = data.get("time", "N/A")
 
+        # Predicción ML
+        signal = predecir(open_price, sl, tp, close_price, volume)
+
         # Construir mensaje
         message = (
-            "📢 *New Signal Received*\n\n"
+            "📢 *ML Signal*\n\n"
             f"📊 *Pair:* {ticker}\n"
-            f"📈 *Signal:* {signal_type.upper()}\n"
-            f"💵 *Entry:* {price}\n"
+            f"🤖 *Prediction:* {signal}\n"
+            f"💵 *Entry:* {open_price}\n"
             f"❌ *SL:* {sl}\n"
             f"✅ *TP:* {tp}\n"
             f"⏱ *TF:* {timeframe}\n"
@@ -46,16 +61,14 @@ def signal():
             "text": message,
             "parse_mode": "Markdown"
         }
-
         r = requests.post(telegram_url, json=payload)
         print("Telegram response:", r.text)
 
-        return jsonify({"status": "ok"}), 200
+        return jsonify({"status": "ok", "signal": signal}), 200
 
     except Exception as e:
         print("Error:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # ============================
 # EJECUCIÓN EN RENDER
