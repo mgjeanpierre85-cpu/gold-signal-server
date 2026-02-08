@@ -6,7 +6,7 @@ app = Flask(__name__)
 # ============================
 # CONFIGURACIÓN DE TELEGRAM
 # ============================
-BOT_TOKEN = "8112184461:AAHs1wZF5D0xTWOeu3VI5YRqQSEHdH0LAWg"
+BOT_TOKEN = "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno"
 CHAT_ID   = "-1003230221533"   # puede ser grupo o canal
 
 # ============================
