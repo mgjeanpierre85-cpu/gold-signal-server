@@ -71,9 +71,6 @@ def append_signal_row(row_dict):
 
 
 def update_signal_result(signal_id, result_value):
-    """
-    Reescribe el CSV actualizando la columna 'result' de la fila con ese id.
-    """
     if not os.path.exists(SIGNALS_CSV):
         return
 
@@ -85,7 +82,6 @@ def update_signal_result(signal_id, result_value):
                 row["result"] = result_value
             rows.append(row)
 
-    # reescribir
     with open(SIGNALS_CSV, "w", newline="") as f:
         fieldnames = [
             "id",
@@ -109,7 +105,6 @@ def update_signal_result(signal_id, result_value):
 # ---------- LÓGICA DE ID DE OPERACIÓN ----------
 
 def build_position_id(ticker, timeframe, time_str):
-    # Ejemplo: GOLD-15-2026-02-08 20:35:00
     return f"{ticker}-{timeframe}-{time_str}"
 
 
@@ -119,7 +114,6 @@ def build_position_id(ticker, timeframe, time_str):
 def predict():
     data = request.get_json(force=True)
 
-    # Datos que vienen de TradingView + modelo
     open_price = float(data.get("open_price"))
     sl = float(data.get("sl"))
     tp = float(data.get("tp"))
@@ -127,13 +121,11 @@ def predict():
     volume = data.get("volume", "0.01")
     ticker = data.get("ticker", "GOLD")
     timeframe = str(data.get("timeframe", "1"))
-    time_str = data.get("time")  # "2026-02-08 20:35:00"
-    model_prediction = data.get("model_prediction")  # "BUY" o "SELL"
+    time_str = data.get("time")
+    model_prediction = data.get("model_prediction")
 
-    # ID único de la operación
     position_id = build_position_id(ticker, timeframe, time_str)
 
-    # Guardar en CSV (result vacío al inicio)
     signal_row = {
         "id": position_id,
         "open_price": open_price,
@@ -149,7 +141,6 @@ def predict():
     }
     append_signal_row(signal_row)
 
-    # Guardar operación abierta en JSON
     open_positions = load_open_positions()
     open_positions.append({
         "id": position_id,
@@ -158,7 +149,7 @@ def predict():
         "open_price": open_price,
         "sl": sl,
         "tp": tp,
-        "prediction": model_prediction,  # BUY / SELL
+        "prediction": model_prediction,
         "status": "open"
     })
     save_open_positions(open_positions)
@@ -166,7 +157,7 @@ def predict():
     return jsonify({"status": "ok", "id": position_id})
 
 
-# ---------- ENDPOINT /update_candle ----------
+# ---------- ENDPOINT /update_candle (CORREGIDO) ----------
 
 @app.route("/update_candle", methods=["POST"])
 def update_candle():
@@ -174,8 +165,13 @@ def update_candle():
 
     ticker = data.get("ticker")
     timeframe = str(data.get("timeframe"))
-    high = float(data.get("high"))
-    low = float(data.get("low"))
+
+    # FIX: tolerancia a datos faltantes
+    try:
+        high = float(data.get("high"))
+        low = float(data.get("low"))
+    except:
+        return jsonify({"status": "ignored"}), 200
 
     open_positions = load_open_positions()
     updated_positions = []
@@ -211,16 +207,13 @@ def update_candle():
                 result = "LOSS"
 
         if result is not None:
-            # cerrar operación
             pos["status"] = "closed"
             closed_positions.append((pos_id, result))
         else:
             updated_positions.append(pos)
 
-    # guardar las que siguen abiertas
     save_open_positions(updated_positions)
 
-    # actualizar CSV para las cerradas
     for pos_id, result in closed_positions:
         update_signal_result(pos_id, result)
 
@@ -231,7 +224,7 @@ def update_candle():
     })
 
 
-# ---------- ENDPOINTS DE UTILIDAD (OPCIONALES) ----------
+# ---------- ENDPOINTS DE UTILIDAD ----------
 
 @app.route("/view_csv", methods=["GET"])
 def view_csv():
