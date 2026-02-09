@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import requests
 import joblib
 import numpy as np
+import csv
+import os
 
 app = Flask(__name__)
 
@@ -14,6 +16,44 @@ def predecir(open_price, sl, tp, close_price, volume):
     X = np.array([[open_price, sl, tp, close_price, volume]])
     pred = modelo.predict(X)[0]
     return "BUY" if pred == 1 else "SELL"
+
+# ============================
+# FUNCIÓN PARA GUARDAR SEÑALES
+# ============================
+def save_signal(data, prediction):
+    file_exists = os.path.isfile("signals.csv")
+
+    with open("signals.csv", "a", newline="") as f:
+        writer = csv.writer(f)
+
+        # Si el archivo NO existe, escribimos encabezados
+        if not file_exists:
+            writer.writerow([
+                "open_price",
+                "sl",
+                "tp",
+                "close_price",
+                "volume",
+                "ticker",
+                "timeframe",
+                "time",
+                "model_prediction",
+                "result"  # WIN/LOSS se llena después
+            ])
+
+        # Guardar la fila
+        writer.writerow([
+            data.get("open_price"),
+            data.get("sl"),
+            data.get("tp"),
+            data.get("close_price"),
+            data.get("volume"),
+            data.get("ticker"),
+            data.get("timeframe"),
+            data.get("time"),
+            prediction,
+            ""  # resultado real se llena después
+        ])
 
 # ============================
 # CONFIGURACIÓN DE TELEGRAM
@@ -41,6 +81,9 @@ def predict():
 
         # Predicción ML
         signal = predecir(open_price, sl, tp, close_price, volume)
+
+        # GUARDAR SEÑAL EN CSV
+        save_signal(data, signal)
 
         # Construir mensaje
         message = (
