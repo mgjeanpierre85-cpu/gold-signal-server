@@ -260,6 +260,10 @@ def download_csv():
 def root():
     return "GOLD ML Signal Server is running."
 
+@app.route("/test_telegram")
+def test_telegram():
+    send_telegram("<b>TEST OK</b>\nEl servidor está enviando mensajes a Telegram correctamente.")
+    return jsonify({"status": "telegram_test_sent"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
