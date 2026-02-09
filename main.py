@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import requests
 import joblib
 import numpy as np
@@ -114,9 +114,39 @@ def predict():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ============================
+# RUTA PARA VER EL CSV EN PANTALLA
+# ============================
+@app.route("/view_csv", methods=["GET"])
+def view_csv():
+    try:
+        if not os.path.isfile("signals.csv"):
+            return "El archivo signals.csv aún no existe."
+
+        with open("signals.csv", "r") as f:
+            content = f.read().replace("\n", "<br>")
+
+        return f"<h2>Contenido de signals.csv</h2><p>{content}</p>"
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# ============================
+# RUTA PARA DESCARGAR EL CSV
+# ============================
+@app.route("/download_csv", methods=["GET"])
+def download_csv():
+    try:
+        if not os.path.isfile("signals.csv"):
+            return "El archivo signals.csv aún no existe."
+
+        return send_file("signals.csv", as_attachment=True)
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# ============================
 # EJECUCIÓN EN RENDER
 # ============================
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
