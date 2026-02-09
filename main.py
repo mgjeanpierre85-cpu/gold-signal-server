@@ -3,11 +3,29 @@ import json
 import csv
 from datetime import datetime
 from flask import Flask, request, jsonify
+import requests
 
 app = Flask(__name__)
 
 SIGNALS_CSV = "signals.csv"
 OPEN_POSITIONS_FILE = "open_positions.json"
+
+# ---------------- TELEGRAM ----------------
+
+TELEGRAM_TOKEN = "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno"
+TELEGRAM_CHAT_ID = "-1003230221533"
+
+def send_telegram(text):
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "parse_mode": "HTML"
+        }
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        print("Telegram error:", e)
 
 
 # ---------------- JSON UTILS ----------------
@@ -87,6 +105,8 @@ def build_position_id(ticker, timeframe, time_str):
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json(force=True, silent=True)
+    print("DEBUG_JSON_RECEIVED:", data)
+
     if not data:
         return jsonify({"status":"bad_request","reason":"no_json"}), 400
 
@@ -133,6 +153,19 @@ def predict():
     })
     save_open_positions(open_positions)
 
+    # ---------------- TELEGRAM SIGNAL ----------------
+    direction = "BUY" if model_prediction == "BUY" else "SELL"
+    msg = (
+        f"<b>{direction} SIGNAL</b>\n"
+        f"Ticker: {ticker}\n"
+        f"TF: {timeframe}\n"
+        f"Open: {open_price}\n"
+        f"SL: {sl}\n"
+        f"TP: {tp}\n"
+        f"Time: {time_str}"
+    )
+    send_telegram(msg)
+
     return jsonify({"status":"ok","id":position_id})
 
 
@@ -178,6 +211,15 @@ def update_candle():
         if result:
             pos["status"] = "closed"
             closed.append((pid, result))
+
+            # ---------------- TELEGRAM CLOSE ----------------
+            msg = (
+                f"<b>TRADE CLOSED</b>\n"
+                f"ID: {pid}\n"
+                f"Result: {result}"
+            )
+            send_telegram(msg)
+
         else:
             updated.append(pos)
 
@@ -220,4 +262,4 @@ def root():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0
