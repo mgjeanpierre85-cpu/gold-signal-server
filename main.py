@@ -153,31 +153,24 @@ def predict():
     })
     save_open_positions(open_positions)
 
-    # ---------------- TELEGRAM SIGNAL ----------------
+    # ---------------- TELEGRAM SIGNAL (NUEVO FORMATO) ----------------
     direction = "BUY" if model_prediction == "BUY" else "SELL"
 
-    # Fecha en formato MM/DD/YYYY y hora separada
-    try:
-        dt_obj = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-        date_formatted = dt_obj.strftime("%m/%d/%Y")
-        time_only = dt_obj.strftime("%H:%M:%S")
-    except Exception:
-        # fallback por si viene en otro formato
-        parts = time_str.split(" ")
-        date_formatted = time_str
-        time_only = parts[1] if len(parts) > 1 else time_str
+    # Fecha en formato MM/DD/YYYY
+    dt_obj = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+    date_formatted = dt_obj.strftime("%m/%d/%Y")
 
     msg = (
-        f"🤖 ML Signal\n"
-        f"Pair: {ticker}\n"
-        f"Prediction: {direction}\n"
-        f"Entry: {open_price:.2f}\n"
-        f"SL: {sl:.2f}\n"
-        f"TP: {tp:.2f}\n"
-        f"TF: {timeframe}\n"
-        f"Date: {date_formatted}\n"
-        f"Time: {time_only}"
+        "🤖 <b>ML Signal</b> 🤖\n\n"
+        f"<b>Pair:</b>            {ticker}\n"
+        f"<b>Prediction:</b>      {direction}\n"
+        f"<b>Entry:</b>           {open_price:.2f}\n"
+        f"<b>SL:</b>              {sl:.2f}\n"
+        f"<b>TP:</b>              {tp:.2f}\n"
+        f"<b>TF:</b>              {timeframe}m\n"
+        f"<b>Date:</b>            {date_formatted}"
     )
+
     send_telegram(msg)
 
     return jsonify({"status":"ok","id":position_id})
@@ -226,7 +219,6 @@ def update_candle():
             pos["status"] = "closed"
             closed.append((pid, result))
 
-            # ---------------- TELEGRAM CLOSE ----------------
             msg = (
                 f"<b>TRADE CLOSED</b>\n"
                 f"ID: {pid}\n"
