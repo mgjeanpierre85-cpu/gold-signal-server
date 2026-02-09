@@ -155,14 +155,28 @@ def predict():
 
     # ---------------- TELEGRAM SIGNAL ----------------
     direction = "BUY" if model_prediction == "BUY" else "SELL"
+
+    # Fecha en formato MM/DD/YYYY y hora separada
+    try:
+        dt_obj = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+        date_formatted = dt_obj.strftime("%m/%d/%Y")
+        time_only = dt_obj.strftime("%H:%M:%S")
+    except Exception:
+        # fallback por si viene en otro formato
+        parts = time_str.split(" ")
+        date_formatted = time_str
+        time_only = parts[1] if len(parts) > 1 else time_str
+
     msg = (
-        f"<b>{direction} SIGNAL</b>\n"
-        f"Ticker: {ticker}\n"
+        f"🤖 ML Signal\n"
+        f"Pair: {ticker}\n"
+        f"Prediction: {direction}\n"
+        f"Entry: {open_price:.2f}\n"
+        f"SL: {sl:.2f}\n"
+        f"TP: {tp:.2f}\n"
         f"TF: {timeframe}\n"
-        f"Open: {open_price}\n"
-        f"SL: {sl}\n"
-        f"TP: {tp}\n"
-        f"Time: {time_str}"
+        f"Date: {date_formatted}\n"
+        f"Time: {time_only}"
     )
     send_telegram(msg)
 
