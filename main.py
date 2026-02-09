@@ -1,34 +1,43 @@
-from flask import Flask, request, jsonify, send_file
-import requests
-import joblib
-import numpy as np
-import csv
 import os
+import json
+import csv
+from datetime import datetime
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ============================
-# CARGAR MODELO ML
-# ============================
-modelo = joblib.load("modelo_trading.pkl")
+SIGNALS_CSV = "signals.csv"
+OPEN_POSITIONS_FILE = "open_positions.json"
 
-def predecir(open_price, sl, tp, close_price, volume):
-    X = np.array([[open_price, sl, tp, close_price, volume]])
-    pred = modelo.predict(X)[0]
-    return "BUY" if pred == 1 else "SELL"
 
-# ============================
-# FUNCIÓN PARA GUARDAR SEÑALES
-# ============================
-def save_signal(data, prediction):
-    file_exists = os.path.isfile("signals.csv")
+# ---------- UTILIDADES JSON ----------
 
-    with open("signals.csv", "a", newline="") as f:
-        writer = csv.writer(f)
+def load_open_positions():
+    if not os.path.exists(OPEN_POSITIONS_FILE):
+        return []
+    with open(OPEN_POSITIONS_FILE, "r") as f:
+        try:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+        except json.JSONDecodeError:
+            return []
 
-        # Si el archivo NO existe, escribimos encabezados
-        if not file_exists:
+
+def save_open_positions(positions):
+    with open(OPEN_POSITIONS_FILE, "w") as f:
+        json.dump(positions, f, indent=2)
+
+
+# ---------- UTILIDADES CSV ----------
+
+def ensure_csv_exists():
+    if not os.path.exists(SIGNALS_CSV):
+        with open(SIGNALS_CSV, "w", newline="") as f:
+            writer = csv.writer(f)
             writer.writerow([
+                "id",
                 "open_price",
                 "sl",
                 "tp",
@@ -38,115 +47,217 @@ def save_signal(data, prediction):
                 "timeframe",
                 "time",
                 "model_prediction",
-                "result"  # WIN/LOSS se llena después
+                "result"
             ])
 
-        # Guardar la fila
+
+def append_signal_row(row_dict):
+    ensure_csv_exists()
+    with open(SIGNALS_CSV, "a", newline="") as f:
+        writer = csv.writer(f)
         writer.writerow([
-            data.get("open_price"),
-            data.get("sl"),
-            data.get("tp"),
-            data.get("close_price"),
-            data.get("volume"),
-            data.get("ticker"),
-            data.get("timeframe"),
-            data.get("time"),
-            prediction,
-            ""  # resultado real se llena después
+            row_dict.get("id", ""),
+            row_dict.get("open_price", ""),
+            row_dict.get("sl", ""),
+            row_dict.get("tp", ""),
+            row_dict.get("close_price", ""),
+            row_dict.get("volume", ""),
+            row_dict.get("ticker", ""),
+            row_dict.get("timeframe", ""),
+            row_dict.get("time", ""),
+            row_dict.get("model_prediction", ""),
+            row_dict.get("result", "")
         ])
 
-# ============================
-# CONFIGURACIÓN DE TELEGRAM
-# ============================
-BOT_TOKEN = "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno"
-CHAT_ID   = "-1003230221533"
 
-# ============================
-# RUTA PARA RECIBIR DATOS Y PREDECIR
-# ============================
+def update_signal_result(signal_id, result_value):
+    """
+    Reescribe el CSV actualizando la columna 'result' de la fila con ese id.
+    """
+    if not os.path.exists(SIGNALS_CSV):
+        return
+
+    rows = []
+    with open(SIGNALS_CSV, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("id") == signal_id:
+                row["result"] = result_value
+            rows.append(row)
+
+    # reescribir
+    with open(SIGNALS_CSV, "w", newline="") as f:
+        fieldnames = [
+            "id",
+            "open_price",
+            "sl",
+            "tp",
+            "close_price",
+            "volume",
+            "ticker",
+            "timeframe",
+            "time",
+            "model_prediction",
+            "result"
+        ]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+
+
+# ---------- LÓGICA DE ID DE OPERACIÓN ----------
+
+def build_position_id(ticker, timeframe, time_str):
+    # Ejemplo: GOLD-15-2026-02-08 20:35:00
+    return f"{ticker}-{timeframe}-{time_str}"
+
+
+# ---------- ENDPOINT /predict ----------
+
 @app.route("/predict", methods=["POST"])
 def predict():
-    try:
-        data = request.get_json()
-        print("Datos recibidos:", data)
+    data = request.get_json(force=True)
 
-        open_price  = float(data["open_price"])
-        sl          = float(data["sl"])
-        tp          = float(data["tp"])
-        close_price = float(data["close_price"])
-        volume      = float(data["volume"])
-        ticker      = data.get("ticker", "N/A")
-        timeframe   = data.get("timeframe", "N/A")
-        time        = data.get("time", "N/A")
+    # Datos que vienen de TradingView + modelo
+    open_price = float(data.get("open_price"))
+    sl = float(data.get("sl"))
+    tp = float(data.get("tp"))
+    close_price = float(data.get("close_price", open_price))
+    volume = data.get("volume", "0.01")
+    ticker = data.get("ticker", "GOLD")
+    timeframe = str(data.get("timeframe", "1"))
+    time_str = data.get("time")  # "2026-02-08 20:35:00"
+    model_prediction = data.get("model_prediction")  # "BUY" o "SELL"
 
-        # Predicción ML
-        signal = predecir(open_price, sl, tp, close_price, volume)
+    # ID único de la operación
+    position_id = build_position_id(ticker, timeframe, time_str)
 
-        # GUARDAR SEÑAL EN CSV
-        save_signal(data, signal)
+    # Guardar en CSV (result vacío al inicio)
+    signal_row = {
+        "id": position_id,
+        "open_price": open_price,
+        "sl": sl,
+        "tp": tp,
+        "close_price": close_price,
+        "volume": volume,
+        "ticker": ticker,
+        "timeframe": timeframe,
+        "time": time_str,
+        "model_prediction": model_prediction,
+        "result": ""
+    }
+    append_signal_row(signal_row)
 
-        # Construir mensaje
-        message = (
-            "📢 *ML Signal*\n\n"
-            f"📊 *Pair:* {ticker}\n"
-            f"🤖 *Prediction:* {signal}\n"
-            f"💵 *Entry:* {open_price}\n"
-            f"❌ *SL:* {sl}\n"
-            f"✅ *TP:* {tp}\n"
-            f"⏱ *TF:* {timeframe}\n"
-            f"📅 *Time:* {time}"
-        )
+    # Guardar operación abierta en JSON
+    open_positions = load_open_positions()
+    open_positions.append({
+        "id": position_id,
+        "ticker": ticker,
+        "timeframe": timeframe,
+        "open_price": open_price,
+        "sl": sl,
+        "tp": tp,
+        "prediction": model_prediction,  # BUY / SELL
+        "status": "open"
+    })
+    save_open_positions(open_positions)
 
-        # Enviar a Telegram
-        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
-        r = requests.post(telegram_url, json=payload)
-        print("Telegram response:", r.text)
+    return jsonify({"status": "ok", "id": position_id})
 
-        return jsonify({"status": "ok", "signal": signal}), 200
 
-    except Exception as e:
-        print("Error:", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+# ---------- ENDPOINT /update_candle ----------
 
-# ============================
-# RUTA PARA VER EL CSV EN PANTALLA
-# ============================
+@app.route("/update_candle", methods=["POST"])
+def update_candle():
+    data = request.get_json(force=True)
+
+    ticker = data.get("ticker")
+    timeframe = str(data.get("timeframe"))
+    high = float(data.get("high"))
+    low = float(data.get("low"))
+
+    open_positions = load_open_positions()
+    updated_positions = []
+    closed_positions = []
+
+    for pos in open_positions:
+        if pos["ticker"] != ticker:
+            updated_positions.append(pos)
+            continue
+        if str(pos["timeframe"]) != timeframe:
+            updated_positions.append(pos)
+            continue
+        if pos["status"] != "open":
+            updated_positions.append(pos)
+            continue
+
+        prediction = pos["prediction"]
+        tp = float(pos["tp"])
+        sl = float(pos["sl"])
+        pos_id = pos["id"]
+
+        result = None
+
+        if prediction == "BUY":
+            if high >= tp:
+                result = "WIN"
+            elif low <= sl:
+                result = "LOSS"
+        elif prediction == "SELL":
+            if low <= tp:
+                result = "WIN"
+            elif high >= sl:
+                result = "LOSS"
+
+        if result is not None:
+            # cerrar operación
+            pos["status"] = "closed"
+            closed_positions.append((pos_id, result))
+        else:
+            updated_positions.append(pos)
+
+    # guardar las que siguen abiertas
+    save_open_positions(updated_positions)
+
+    # actualizar CSV para las cerradas
+    for pos_id, result in closed_positions:
+        update_signal_result(pos_id, result)
+
+    return jsonify({
+        "status": "ok",
+        "closed": [{"id": pid, "result": res} for pid, res in closed_positions],
+        "open_count": len(updated_positions)
+    })
+
+
+# ---------- ENDPOINTS DE UTILIDAD (OPCIONALES) ----------
+
 @app.route("/view_csv", methods=["GET"])
 def view_csv():
-    try:
-        if not os.path.isfile("signals.csv"):
-            return "El archivo signals.csv aún no existe."
+    if not os.path.exists(SIGNALS_CSV):
+        return "signals.csv no existe todavía."
+    with open(SIGNALS_CSV, "r") as f:
+        content = f.read()
+    return f"<h1>Contenido de signals.csv</h1><pre>{content}</pre>"
 
-        with open("signals.csv", "r") as f:
-            content = f.read().replace("\n", "<br>")
 
-        return f"<h2>Contenido de signals.csv</h2><p>{content}</p>"
-
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-# ============================
-# RUTA PARA DESCARGAR EL CSV
-# ============================
 @app.route("/download_csv", methods=["GET"])
 def download_csv():
-    try:
-        if not os.path.isfile("signals.csv"):
-            return "El archivo signals.csv aún no existe."
+    if not os.path.exists(SIGNALS_CSV):
+        return "signals.csv no existe todavía.", 404
+    with open(SIGNALS_CSV, "r") as f:
+        content = f.read()
+    return content, 200, {
+        "Content-Type": "text/csv",
+        "Content-Disposition": "attachment; filename=signals.csv"
+    }
 
-        return send_file("signals.csv", as_attachment=True)
 
-    except Exception as e:
-        return f"Error: {str(e)}"
+@app.route("/", methods=["GET"])
+def root():
+    return "GOLD ML Signal Server is running."
 
-# ============================
-# EJECUCIÓN EN RENDER
-# ============================
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=10000)
