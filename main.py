@@ -28,6 +28,27 @@ def send_telegram(text):
         print("Telegram error:", e)
 
 
+# ---------------- JSON FIX ----------------
+
+def get_json_flexible():
+    """
+    FIX: TradingView manda text/plain, no application/json.
+    Esto permite leer el JSON aunque venga como texto.
+    """
+    data = request.get_json(silent=True)
+    if data is not None:
+        return data
+
+    try:
+        raw = request.data.decode("utf-8").strip()
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+
+    return None
+
+
 # ---------------- JSON UTILS ----------------
 
 def load_open_positions():
@@ -106,7 +127,7 @@ def build_position_id(ticker, timeframe, time_str):
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    data = request.get_json(force=True, silent=True)
+    data = get_json_flexible()
     print("DEBUG_JSON_RECEIVED:", data)
 
     if not data:
@@ -183,7 +204,8 @@ def predict():
 
 @app.route("/update_candle", methods=["POST"])
 def update_candle():
-    data = request.get_json(force=True, silent=True)
+    data = get_json_flexible()
+
     if not data:
         return jsonify({"status": "ignored", "reason": "no_json"}), 200
 
