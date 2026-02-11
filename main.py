@@ -5,10 +5,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 import requests
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker
-
-# ---------------- FLASK ----------------
+# ---------------- FLASK APP ----------------
 app = Flask(__name__)
 
 SIGNALS_CSV = "signals.csv"
@@ -31,17 +28,20 @@ def send_telegram(text):
         print("Telegram error:", e)
 
 # ---------------- DATABASE ----------------
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 DATABASE_URL = "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB@dpg-d6695v1r0fns73cjejmg-a.oregon-postgres.render.com/trading_signals_db_lsxd"
 
 engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
 class Signal(Base):
     __tablename__ = "signals"
 
-    id = Column(Integer, primary_key=True)
-    position_id = Column(String)
+    id = Column(Integer, primary_key=True, index=True)
+    position_id = Column(String, index=True)
     ticker = Column(String)
     timeframe = Column(String)
     open_price = Column(Float)
@@ -51,11 +51,10 @@ class Signal(Base):
     volume = Column(String)
     model_prediction = Column(String)
     time = Column(String)
-    result = Column(String)
+    result = Column(String, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# 🔥 FORZAR RECREACIÓN DE TABLA
-Base.metadata.drop_all(bind=engine)
+# ✅ SOLO CREA TABLAS SI NO EXISTEN
 Base.metadata.create_all(bind=engine)
 
 # ---------------- JSON FIX ----------------
@@ -100,30 +99,38 @@ def append_signal_row(row):
             row.get("result","")
         ])
 
+# ---------------- ID BUILDER ----------------
+def build_position_id(ticker, timeframe, time_str):
+    return f"{ticker}-{timeframe}-{time_str}"
+
 # ---------------- /predict ----------------
 @app.route("/predict", methods=["POST"])
 def predict():
     data = get_json_flexible()
+    print("DEBUG_JSON_RECEIVED:", data)
+
     if not data:
         return jsonify({"status": "bad_request"}), 400
 
     open_price = float(data["open_price"])
     sl = float(data["sl"])
     tp = float(data["tp"])
+    close_price = float(data.get("close_price", open_price))
+
     volume = data.get("volume", "0.01")
     ticker = data.get("ticker", "GOLD")
     timeframe = str(data.get("timeframe", "1"))
-    time_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    time_str = data.get("time") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     model_prediction = data.get("model_prediction")
 
-    position_id = f"{ticker}-{timeframe}-{time_str}"
+    position_id = build_position_id(ticker, timeframe, time_str)
 
     append_signal_row({
         "id": position_id,
         "open_price": open_price,
         "sl": sl,
         "tp": tp,
-        "close_price": open_price,
+        "close_price": close_price,
         "volume": volume,
         "ticker": ticker,
         "timeframe": timeframe,
@@ -140,7 +147,7 @@ def predict():
         open_price=open_price,
         sl=sl,
         tp=tp,
-        close_price=open_price,
+        close_price=close_price,
         volume=volume,
         model_prediction=model_prediction,
         time=time_str,
@@ -149,7 +156,12 @@ def predict():
     db.commit()
     db.close()
 
-    send_telegram(f"🚨 ML SIGNAL\n{ticker} {model_prediction}\nEntry: {open_price}")
+    send_telegram(
+        f"🚨 <b>ML SIGNAL</b>\n"
+        f"{ticker} {model_prediction}\n"
+        f"Entry: {open_price}\n"
+        f"SL: {sl} | TP: {tp}"
+    )
 
     return jsonify({"status": "ok", "id": position_id})
 
