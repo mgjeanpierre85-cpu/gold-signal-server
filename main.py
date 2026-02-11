@@ -165,6 +165,17 @@ def predict():
 
     return jsonify({"status": "ok", "id": position_id})
 
+# ---------------- /stats ----------------
+@app.route("/stats", methods=["GET"])
+def stats():
+    db = SessionLocal()
+    total = db.query(Signal).count()
+    db.close()
+
+    return jsonify({
+        "total_signals": total
+    })
+
 # ---------------- ROOT ----------------
 @app.route("/")
 def root():
