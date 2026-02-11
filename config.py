@@ -1,0 +1,7 @@
+# config.py
+
+TELEGRAM_TOKEN = "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno"
+TELEGRAM_CHAT_ID = "-1003230221533"
+
+SIGNALS_CSV = "signals.csv"
+OPEN_POSITIONS_FILE = "open_positions.json"
