@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+signals.csv
+open_positions.json
+.env
