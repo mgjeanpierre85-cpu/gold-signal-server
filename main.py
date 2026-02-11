@@ -37,7 +37,7 @@ def load_open_positions():
         with open(OPEN_POSITIONS_FILE, "r") as f:
             data = json.load(f)
             return data if isinstance(data, list) else []
-    except:
+    except Exception:
         return []
 
 
@@ -85,9 +85,11 @@ def update_signal_result(signal_id, result):
     with open(SIGNALS_CSV, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row["id"] == signal_id:
+            if row.get("id") == signal_id:
                 row["result"] = result
             rows.append(row)
+    if not rows:
+        return
     with open(SIGNALS_CSV, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()
@@ -108,19 +110,19 @@ def predict():
     print("DEBUG_JSON_RECEIVED:", data)
 
     if not data:
-        return jsonify({"status":"bad_request","reason":"no_json"}), 400
+        return jsonify({"status": "bad_request", "reason": "no_json"}), 400
 
     try:
         open_price = float(data["open_price"])
         sl = float(data["sl"])
         tp = float(data["tp"])
         close_price = float(data.get("close_price", open_price))
-    except:
-        return jsonify({"status":"bad_request","reason":"invalid_numbers","data":data}), 400
+    except Exception:
+        return jsonify({"status": "bad_request", "reason": "invalid_numbers"}), 400
 
-    volume = data.get("volume","0.01")
-    ticker = data.get("ticker","GOLD")
-    timeframe = str(data.get("timeframe","1"))
+    volume = data.get("volume", "0.01")
+    ticker = data.get("ticker", "GOLD")
+    timeframe = str(data.get("timeframe", "1"))
     time_str = data.get("time") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     model_prediction = data.get("model_prediction")
 
@@ -153,12 +155,13 @@ def predict():
     })
     save_open_positions(open_positions)
 
-    # ---------------- TELEGRAM SIGNAL (NUEVO FORMATO) ----------------
     direction = "BUY" if model_prediction == "BUY" else "SELL"
 
-    # Fecha en formato MM/DD/YYYY
-    dt_obj = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-    date_formatted = dt_obj.strftime("%m/%d/%Y")
+    try:
+        dt_obj = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+        date_formatted = dt_obj.strftime("%m/%d/%Y")
+    except Exception:
+        date_formatted = time_str
 
     msg = (
         "🚨 <b>~ ML Signal ~</b>🤖\n\n"
@@ -173,7 +176,7 @@ def predict():
 
     send_telegram(msg)
 
-    return jsonify({"status":"ok","id":position_id})
+    return jsonify({"status": "ok", "id": position_id})
 
 
 # ---------------- /update_candle ----------------
@@ -182,7 +185,7 @@ def predict():
 def update_candle():
     data = request.get_json(force=True, silent=True)
     if not data:
-        return jsonify({"status":"ignored","reason":"no_json"}), 200
+        return jsonify({"status": "ignored", "reason": "no_json"}), 200
 
     ticker = data.get("ticker")
     timeframe = str(data.get("timeframe"))
@@ -190,30 +193,34 @@ def update_candle():
     try:
         high = float(data["high"])
         low = float(data["low"])
-    except:
-        return jsonify({"status":"ignored","reason":"missing_high_low"}), 200
+    except Exception:
+        return jsonify({"status": "ignored", "reason": "missing_high_low"}), 200
 
     open_positions = load_open_positions()
     updated = []
     closed = []
 
     for pos in open_positions:
-        if pos["ticker"] != ticker or str(pos["timeframe"]) != timeframe or pos["status"] != "open":
+        if pos.get("ticker") != ticker or str(pos.get("timeframe")) != timeframe or pos.get("status") != "open":
             updated.append(pos)
             continue
 
-        pred = pos["prediction"]
+        pred = pos.get("prediction")
         tp = float(pos["tp"])
         sl = float(pos["sl"])
         pid = pos["id"]
 
         result = None
         if pred == "BUY":
-            if high >= tp: result = "WIN"
-            elif low <= sl: result = "LOSS"
+            if high >= tp:
+                result = "WIN"
+            elif low <= sl:
+                result = "LOSS"
         elif pred == "SELL":
-            if low <= tp: result = "WIN"
-            elif high >= sl: result = "LOSS"
+            if low <= tp:
+                result = "WIN"
+            elif high >= sl:
+                result = "LOSS"
 
         if result:
             pos["status"] = "closed"
@@ -225,7 +232,6 @@ def update_candle():
                 f"Result: {result}"
             )
             send_telegram(msg)
-
         else:
             updated.append(pos)
 
@@ -235,9 +241,9 @@ def update_candle():
         update_signal_result(pid, res)
 
     return jsonify({
-        "status":"ok",
-        "closed":[{"id":pid,"result":res} for pid,res in closed],
-        "open_count":len(updated)
+        "status": "ok",
+        "closed": [{"id": pid, "result": res} for pid, res in closed],
+        "open_count": len(updated)
     })
 
 
@@ -247,7 +253,7 @@ def update_candle():
 def view_csv():
     if not os.path.exists(SIGNALS_CSV):
         return "signals.csv no existe."
-    with open(SIGNALS_CSV,"r") as f:
+    with open(SIGNALS_CSV, "r") as f:
         return f"<pre>{f.read()}</pre>"
 
 
@@ -255,10 +261,10 @@ def view_csv():
 def download_csv():
     if not os.path.exists(SIGNALS_CSV):
         return "signals.csv no existe.", 404
-    with open(SIGNALS_CSV,"r") as f:
+    with open(SIGNALS_CSV, "r") as f:
         return f.read(), 200, {
-            "Content-Type":"text/csv",
-            "Content-Disposition":"attachment; filename=signals.csv"
+            "Content-Type": "text/csv",
+            "Content-Disposition": "attachment; filename=signals.csv"
         }
 
 
@@ -266,10 +272,12 @@ def download_csv():
 def root():
     return "GOLD ML Signal Server is running."
 
+
 @app.route("/test_telegram")
 def test_telegram():
     send_telegram("<b>TEST OK</b>\nEl servidor está enviando mensajes a Telegram correctamente.")
     return jsonify({"status": "telegram_test_sent"})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
