@@ -2,7 +2,7 @@ import os
 import json
 import csv
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import requests
 
 # ---------------- FLASK APP ----------------
@@ -229,6 +229,61 @@ def results():
         "last_signals": last_signals,
         "history": history
     })
+
+# ---------------- /archive_weekly ----------------
+@app.route("/archive_weekly", methods=["GET"])
+def archive_weekly():
+    db = SessionLocal()
+    rows = db.query(Signal).all()
+
+    if not rows:
+        db.close()
+        return jsonify({"status": "no_data"}), 200
+
+    year = datetime.utcnow().strftime("%Y")
+    week = datetime.utcnow().strftime("%U")
+    filename = f"signals_{year}_week_{week}.csv"
+
+    filepath = os.path.join(".", filename)
+    with open(filepath, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "position_id", "ticker", "timeframe", "open_price",
+            "sl", "tp", "close_price", "volume",
+            "model_prediction", "time", "result", "created_at"
+        ])
+        for r in rows:
+            writer.writerow([
+                r.position_id, r.ticker, r.timeframe, r.open_price,
+                r.sl, r.tp, r.close_price, r.volume,
+                r.model_prediction, r.time, r.result, r.created_at
+            ])
+
+    db.query(Signal).delete()
+    db.commit()
+    db.close()
+
+    download_url = f"https://gold-signal-server.onrender.com/download/{filename}"
+    send_telegram(
+        f"📁 <b>Archivo semanal generado</b>\n"
+        f"Semana: {week} - Año: {year}\n"
+        f"<a href='{download_url}'>Descargar CSV</a>"
+    )
+
+    return jsonify({
+        "status": "archived",
+        "file": filename,
+        "download_url": download_url
+    })
+
+# ---------------- /download/<filename> ----------------
+@app.route("/download/<filename>", methods=["GET"])
+def download_file(filename):
+    filepath = os.path.join(".", filename)
+    if not os.path.exists(filepath):
+        return jsonify({"status": "not_found"}), 404
+
+    return send_file(filepath, as_attachment=True)
 
 # ---------------- /all_signals ----------------
 @app.route("/all_signals", methods=["GET"])
