@@ -176,6 +176,26 @@ def stats():
         "total_signals": total
     })
 
+# ---------------- /all_signals ----------------
+@app.route("/all_signals", methods=["GET"])
+def all_signals():
+    db = SessionLocal()
+    rows = db.query(Signal).all()
+    db.close()
+
+    result = []
+    for r in rows:
+        result.append({
+            "id": r.id,
+            "position_id": r.position_id,
+            "ticker": r.ticker,
+            "timeframe": r.timeframe,
+            "time": r.time,
+            "result": r.result
+        })
+
+    return jsonify(result)
+
 # ---------------- /close_signal ----------------
 @app.route("/close_signal", methods=["POST"])
 def close_signal():
