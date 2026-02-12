@@ -176,6 +176,32 @@ def stats():
         "total_signals": total
     })
 
+# ---------------- /close_signal ----------------
+@app.route("/close_signal", methods=["POST"])
+def close_signal():
+    data = get_json_flexible()
+    if not data:
+        return jsonify({"status": "bad_request"}), 400
+
+    position_id = data.get("position_id")
+    result = data.get("result")
+
+    if not position_id or not result:
+        return jsonify({"status": "missing_fields"}), 400
+
+    db = SessionLocal()
+    signal = db.query(Signal).filter(Signal.position_id == position_id).first()
+
+    if not signal:
+        db.close()
+        return jsonify({"status": "not_found"}), 404
+
+    signal.result = result
+    db.commit()
+    db.close()
+
+    return jsonify({"status": "updated", "position_id": position_id, "result": result})
+
 # ---------------- ROOT ----------------
 @app.route("/")
 def root():
