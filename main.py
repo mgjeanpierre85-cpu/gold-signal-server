@@ -176,6 +176,60 @@ def stats():
         "total_signals": total
     })
 
+# ---------------- /results (RANGO DE FECHAS) ----------------
+@app.route("/results", methods=["GET"])
+def results():
+    db = SessionLocal()
+
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+
+    query = db.query(Signal)
+
+    if from_date:
+        try:
+            from_dt = datetime.strptime(from_date, "%Y-%m-%d")
+            query = query.filter(Signal.created_at >= from_dt)
+        except:
+            pass
+
+    if to_date:
+        try:
+            to_dt = datetime.strptime(to_date, "%Y-%m-%d")
+            query = query.filter(Signal.created_at <= to_dt)
+        except:
+            pass
+
+    rows = query.all()
+    db.close()
+
+    total = len(rows)
+    wins = sum(1 for r in rows if r.result == "WIN")
+    losses = sum(1 for r in rows if r.result == "LOSS")
+
+    winrate = (wins / total * 100) if total > 0 else 0
+
+    history = [
+        {
+            "position_id": r.position_id,
+            "ticker": r.ticker,
+            "time": r.time,
+            "result": r.result
+        }
+        for r in rows
+    ]
+
+    last_signals = history[-10:]
+
+    return jsonify({
+        "total": total,
+        "wins": wins,
+        "losses": losses,
+        "winrate_percent": f"{winrate:.2f}%",
+        "last_signals": last_signals,
+        "history": history
+    })
+
 # ---------------- /all_signals ----------------
 @app.route("/all_signals", methods=["GET"])
 def all_signals():
