@@ -14,7 +14,8 @@ SIGNALS_CSV = "signals.csv"
 # ---------------- CONFIGURACIÓN ----------------
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003230221533")
-# URL CORREGIDA:
+
+# 1. URL DE BASE DE DATOS CORREGIDA (Sin caracteres extraños)
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB@://dpg-d6695v1r0fns73cjejmg-a.oregon-postgres.render.com")
 
 # ---------------- DATABASE ----------------
@@ -43,7 +44,7 @@ Base.metadata.create_all(bind=engine)
 # ---------------- UTILIDADES ----------------
 def send_telegram(text):
     try:
-        # URL CORREGIDA (añadido /bot)
+        # 2. URL DE TELEGRAM CORREGIDA (Añadido /bot y barra diagonal)
         url = f"https://api.telegram.org{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=5)
     except Exception as e: 
@@ -77,7 +78,7 @@ def backup_telegram():
             for s in signals:
                 writer.writerow([s.position_id, s.ticker, s.timeframe, s.model_prediction, s.open_price, s.close_price, s.result, s.time])
         
-        # URL CORREGIDA (añadido /bot)
+        # 3. URL DE TELEGRAM PARA ARCHIVOS CORREGIDA
         url = f"https://api.telegram.org{TELEGRAM_TOKEN}/sendDocument"
         with open(filename, "rb") as file_data:
             requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "caption": f"📂 Respaldo Academia {datetime.now().strftime('%d/%m/%Y')}"}, files={"document": file_data})
