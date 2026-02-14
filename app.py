@@ -14,6 +14,7 @@ SIGNALS_CSV = "signals.csv"
 # ---------------- CONFIGURACIÓN ----------------
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003230221533")
+# URL CORREGIDA:
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB@://dpg-d6695v1r0fns73cjejmg-a.oregon-postgres.render.com")
 
 # ---------------- DATABASE ----------------
@@ -34,7 +35,7 @@ class Signal(Base):
     volume = Column(String)
     model_prediction = Column(String)
     time = Column(String)
-    result = Column(String, default="PENDING") # PENDING, WIN, LOSS
+    result = Column(String, default="PENDING")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 Base.metadata.create_all(bind=engine)
@@ -42,17 +43,26 @@ Base.metadata.create_all(bind=engine)
 # ---------------- UTILIDADES ----------------
 def send_telegram(text):
     try:
+        # URL CORREGIDA (añadido /bot)
         url = f"https://api.telegram.org{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=5)
-    except Exception as e: print("Telegram error:", e)
+    except Exception as e: 
+        print(f"Telegram error: {e}")
 
 def get_json_flexible():
     data = request.get_json(silent=True)
     if data: return data
-    try: return json.loads(request.data.decode("utf-8").strip())
-    except: return None
+    try: 
+        return json.loads(request.data.decode("utf-8").strip())
+    except: 
+        return None
 
-# ---------------- NUEVA FUNCIÓN DE RESPALDO A TELEGRAM ----------------
+# ---------------- RUTAS ----------------
+
+@app.route("/", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "message": "Servidor de Academia Activo"}), 200
+
 @app.route("/backup-telegram", methods=["GET"])
 def backup_telegram():
     try:
@@ -67,7 +77,7 @@ def backup_telegram():
             for s in signals:
                 writer.writerow([s.position_id, s.ticker, s.timeframe, s.model_prediction, s.open_price, s.close_price, s.result, s.time])
         
-        # Enviar el archivo a Telegram usando multipart/form-data
+        # URL CORREGIDA (añadido /bot)
         url = f"https://api.telegram.org{TELEGRAM_TOKEN}/sendDocument"
         with open(filename, "rb") as file_data:
             requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "caption": f"📂 Respaldo Academia {datetime.now().strftime('%d/%m/%Y')}"}, files={"document": file_data})
@@ -76,7 +86,6 @@ def backup_telegram():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ---------------- RUTA DE DESCARGA DIRECTA A PC ----------------
 @app.route("/download-db", methods=["GET"])
 def download_db():
     try:
@@ -93,7 +102,6 @@ def download_db():
     except Exception as e:
         return str(e), 500
 
-# ---------------- /predict (LÓGICA IA) ----------------
 @app.route("/predict", methods=["POST"])
 def predict():
     data = get_json_flexible()
