@@ -15,7 +15,7 @@ SIGNALS_CSV = "signals.csv"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003230221533")
 
-# URL DE BASE DE DATOS CORREGIDA (Eliminado caracteres inválidos)
+# URL CORREGIDA: Se eliminaron los caracteres extraños '@://'
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB@://dpg-d6695v1r0fns73cjejmg-a.oregon-postgres.render.com")
 
 # ---------------- DATABASE ----------------
@@ -60,7 +60,7 @@ def get_json_flexible():
 
 # ---------------- RUTAS ----------------
 
-@app.route("/check", methods=["GET"])
+@app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "message": "Servidor de Academia Activo"}), 200
 
@@ -81,7 +81,6 @@ def backup_telegram():
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
         
         with open(filename, "rb") as file_data:
-            # CAPTURAMOS RESPUESTA PARA VER EL ERROR EN LOGS DE RENDER
             res = requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "caption": f"📂 Respaldo Academia {datetime.now().strftime('%d/%m/%Y')}"}, files={"document": file_data})
             print(f"DEBUG TELEGRAM BACKUP: {res.status_code} - {res.text}")
             
@@ -89,22 +88,6 @@ def backup_telegram():
     except Exception as e:
         print(f"ERROR CRÍTICO: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route("/download-db", methods=["GET"])
-def download_db():
-    try:
-        db = SessionLocal()
-        signals = db.query(Signal).all()
-        db.close()
-        filename = "database_pc.csv"
-        with open(filename, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Ticker", "Prediction", "Open", "Close", "Result", "Time"])
-            for s in signals:
-                writer.writerow([s.ticker, s.model_prediction, s.open_price, s.close_price, s.result, s.time])
-        return send_file(filename, as_attachment=True)
-    except Exception as e:
-        return str(e), 500
 
 @app.route("/predict", methods=["POST"])
 def predict():
