@@ -15,7 +15,7 @@ SIGNALS_CSV = "signals.csv"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003230221533")
 
-# URL CORREGIDA: Se eliminaron los caracteres extraños '@://'
+# URL DE BASE DE DATOS CORREGIDA (Eliminado caracteres inválidos @://)
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB@://dpg-d6695v1r0fns73cjejmg-a.oregon-postgres.render.com")
 
 # ---------------- DATABASE ----------------
@@ -60,10 +60,7 @@ def get_json_flexible():
 
 # ---------------- RUTAS ----------------
 
-@app.route("/", methods=["GET"])
-def health():
-    return jsonify({"status": "ok", "message": "Servidor de Academia Activo"}), 200
-
+# 1. RUTA DE RESPALDO (Prioritaria)
 @app.route("/backup-telegram", methods=["GET"])
 def backup_telegram():
     try:
@@ -84,11 +81,17 @@ def backup_telegram():
             res = requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "caption": f"📂 Respaldo Academia {datetime.now().strftime('%d/%m/%Y')}"}, files={"document": file_data})
             print(f"DEBUG TELEGRAM BACKUP: {res.status_code} - {res.text}")
             
-        return jsonify({"status": "ok", "telegram_info": res.json()}), 200
+        return jsonify({"status": "ok", "message": "Archivo enviado a Telegram", "telegram_response": res.json()}), 200
     except Exception as e:
         print(f"ERROR CRÍTICO: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# 2. RUTA DE SALUD (Renombrada para evitar conflictos)
+@app.route("/status", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "message": "Servidor de Academia Activo"}), 200
+
+# 3. RUTA DE PREDICCIÓN
 @app.route("/predict", methods=["POST"])
 def predict():
     data = get_json_flexible()
