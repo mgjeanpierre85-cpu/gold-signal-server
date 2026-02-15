@@ -60,7 +60,7 @@ def get_json_flexible():
 
 # ---------------- RUTAS ----------------
 
-@app.route("/", methods=["GET"])
+@app.route("/check", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "message": "Servidor de Academia Activo"}), 200
 
