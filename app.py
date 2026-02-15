@@ -45,7 +45,7 @@ Base.metadata.create_all(bind=engine)
 def send_telegram(text):
     try:
         # 2. URL DE TELEGRAM CORREGIDA (Añadido /bot y barra diagonal)
-        url = f"https://api.telegram.org{TELEGRAM_TOKEN}/sendMessage"
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=5)
     except Exception as e: 
         print(f"Telegram error: {e}")
@@ -79,7 +79,7 @@ def backup_telegram():
                 writer.writerow([s.position_id, s.ticker, s.timeframe, s.model_prediction, s.open_price, s.close_price, s.result, s.time])
         
         # 3. URL DE TELEGRAM PARA ARCHIVOS CORREGIDA
-        url = f"https://api.telegram.org{TELEGRAM_TOKEN}/sendDocument"
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
         with open(filename, "rb") as file_data:
             requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "caption": f"📂 Respaldo Academia {datetime.now().strftime('%d/%m/%Y')}"}, files={"document": file_data})
             
