@@ -14,17 +14,12 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003230221533")
 
-# Obtener DATABASE_URL desde variables de entorno (lo que usa Render)
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
-# Para desarrollo local o si no está configurada en Render (COMENTAR ESTO EN PRODUCCIÓN)
 if not DATABASE_URL:
     DATABASE_URL = (
         "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB"
         "@dpg-d6695v1r0fns73cjejmg-a:5432/trading_signals_db_lsxd"
     )
-
-# Print para debug (ver en logs de Render qué URL se está usando)
 print("DATABASE_URL usada:", DATABASE_URL)
 
 # ---------------- DATABASE ----------------
@@ -53,7 +48,6 @@ Base.metadata.create_all(bind=engine)
 # ---------------- UTILIDADES ----------------
 def send_telegram(text):
     try:
-        # CORRECCIÓN: Agregar /bot antes del token
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
@@ -64,6 +58,36 @@ def send_telegram(text):
         response.raise_for_status()
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
+
+def format_new_signal(ticker, prediction, open_price, sl, tp, timeframe, time_str):
+    direction = "BUY" if prediction == "BUY" else "SELL"
+    try:
+        dt_obj = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+        date_formatted = dt_obj.strftime("%m/%d/%Y")
+        time_formatted = dt_obj.strftime("%I:%M %p")
+    except:
+        date_formatted = time_str[:10]
+        time_formatted = time_str[11:]
+    
+    msg = (
+        "🚨 <b>~ ML Signal ~</b>🤖\n\n"
+        f"📊 <b>Pair:</b> {ticker}\n"
+        f"↕️ <b>Direction:</b> {direction}\n"
+        f"💵 <b>Entry:</b> {open_price:.2f}\n"
+        f"🛑 <b>SL:</b> {sl:.2f}\n"
+        f"✅ <b>TP:</b> {tp:.2f}\n"
+        f"⏰ <b>TF:</b> {timeframe}m\n"
+        f"📅 <b>Date:</b> {date_formatted} {time_formatted}"
+    )
+    return msg
+
+def format_close_signal(ticker, result, close_price):
+    msg = (
+        f"🏁 <b>CIERRE {ticker}</b>\n"
+        f"Resultado: {result}\n"
+        f"Precio Cierre: {close_price:.2f}"
+    )
+    return msg
 
 # ---------------- RUTAS ----------------
 @app.route("/status", methods=["GET"])
@@ -93,7 +117,6 @@ def backup_telegram():
                     s.time
                 ])
        
-        # Enviar archivo a Telegram
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
         with open(filename, "rb") as file_data:
             files = {"document": file_data}
@@ -101,7 +124,6 @@ def backup_telegram():
             res = requests.post(url, data=data, files=files)
             res.raise_for_status()
        
-        # Opcional: borrar el archivo temporal
         os.remove(filename)
        
         return jsonify({"status": "ok", "message": "Archivo enviado a Telegram"}), 200
@@ -113,16 +135,16 @@ def predict():
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"status": "bad_request"}), 400
-    
+   
     try:
         ticker = data.get("ticker", "GOLD")
         prediction = (data.get("prediction") or data.get("model_prediction", "UNKNOWN")).upper()
         current_price = float(data.get("open_price", 0))
         timeframe = str(data.get("timeframe", "1"))
         time_str = data.get("time") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-       
+      
         db = SessionLocal()
-        
+       
         if "EXIT" not in prediction:
             pos_id = f"{ticker}-{timeframe}-{time_str}"
             new_sig = Signal(
@@ -139,13 +161,16 @@ def predict():
             )
             db.add(new_sig)
             db.commit()
-            send_telegram(f"🚨 <b>NUEVA SEÑAL</b>\n{ticker} {prediction}\nPrecio: {current_price}")
+            
+            # Mensaje completo y detallado como en ml-forex
+            msg = format_new_signal(ticker, prediction, current_price, new_sig.sl, new_sig.tp, timeframe, time_str)
+            send_telegram(msg)
         else:
             last_op = db.query(Signal).filter(
                 Signal.ticker == ticker,
                 Signal.result == "PENDING"
             ).order_by(desc(Signal.created_at)).first()
-            
+           
             if last_op:
                 last_op.close_price = current_price
                 if last_op.model_prediction == "BUY":
@@ -153,11 +178,14 @@ def predict():
                 else:
                     last_op.result = "WIN" if current_price < last_op.open_price else "LOSS"
                 db.commit()
-                send_telegram(f"🏁 <b>CIERRE {ticker}</b>\nResultado: {last_op.result}\nPrecio Cierre: {current_price}")
-        
+                
+                # Mensaje de cierre (puedes hacerlo más completo si quieres)
+                msg = format_close_signal(ticker, last_op.result, current_price)
+                send_telegram(msg)
+       
         db.close()
         return jsonify({"status": "ok"}), 200
-    
+   
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
