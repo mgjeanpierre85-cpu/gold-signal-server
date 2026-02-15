@@ -12,8 +12,8 @@ app = Flask(__name__)
 SIGNALS_CSV = "signals.csv"
 
 # ---------------- CONFIGURACIÓN ----------------
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "-1003230221533")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN","8112184461:AAEDjFKsSgrKtv6oBIA3hJ51AhX8eRU7eno")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID","-1003230221533")
 
 # 1. URL DE BASE DE DATOS CORREGIDA (Sin caracteres extraños)
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://trading_signals_db_lsxd_user:jTXAaYG3nMYXUdoDpIHL9hVjFvFPywSB@://dpg-d6695v1r0fns73cjejmg-a.oregon-postgres.render.com")
